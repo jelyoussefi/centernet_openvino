@@ -72,6 +72,7 @@ RUN pip install --no-cache-dir --break-system-packages \
 RUN PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/cpu" pip install torch==2.2.0+cpu torchvision --break-system-packages
 RUN pip install mmcv==2.1.* -f https://download.openmmlab.com/mmcv/dist/cpu/torch2.1/index.html --break-system-packages
 RUN pip install openvino==2025.1 mmdet --break-system-packages
+RUN apt install -y unzip
 
 # ----------------------------------
 # 5. Set Working Directory

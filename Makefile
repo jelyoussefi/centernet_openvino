@@ -7,12 +7,14 @@ CURRENT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 # Directories
 DATASET_DIR := ./dataset
 MODELS_DIR := ./models
+DATASET_DIR := /workspace/datasets/COCO
 
 CHECKPOINT_PATH ?= ./model_epoch_8.pth
 CONFIG_PATH ?= ./model_centernet_r18_8xb16-crop512-140e_coco.py
 
 # Default Parameters
 DEVICE      ?= GPU
+INPUT_SIZE  ?= 640
 PRECISION   ?= FP32
 
 #MODEL_PATH ?= $(MODELS_DIR)/$(PRECISION)/ctdet_coco_dlav0_512.xml
@@ -54,7 +56,7 @@ DOCKER_RUN_PARAMS := \
 # ----------------------------------
 # Targets
 # ----------------------------------
-.PHONY: default build bash
+.PHONY: default build bash dataset
 
 
 default: run
@@ -74,6 +76,10 @@ run: build
 			-p $(PRECISION)"
 
 
+dataset: build
+	@echo "🚀 Preparing the COCO dataset ..."
+	@docker run $(DOCKER_RUN_PARAMS) bash -c ./prepare_coco_dataset.sh
+			
 openvino_export: build
 	@echo "🚀 Exporting PyTorch model to OpenVINO ..."
 	@docker run $(DOCKER_RUN_PARAMS) bash -c "python3 ./openvino_export.py \
@@ -81,6 +87,14 @@ openvino_export: build
 			--checkpoint $(CHECKPOINT_PATH) \
 			--resolution $(INPUT_SIZE)  \
 			--output_dir $(MODELS_DIR)/FP32/"
+
+quantize: build dataset
+	@echo "⚙️ Quantizing model to INT8 ..."
+	@docker run $(DOCKER_RUN_PARAMS) bash -c "python3 ./quantize.py \
+			--model $(MODELS_DIR)/FP32/centernet.xml \
+			--dataset $(DATASET_DIR) \
+			--resize $(INPUT_SIZE) $(INPUT_SIZE) \
+			--output $(MODELS_DIR)/INT8/centernet.xml"
 
 
 bash: build
