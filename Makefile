@@ -16,10 +16,10 @@ DEVICE      ?= GPU
 PRECISION   ?= FP32
 
 MODEL_PATH ?= $(MODELS_DIR)/$(PRECISION)/ctdet_coco_dlav0_512.xml
-INPUT_PATH ?= ./streams/streat.mp4
+#INPUT_PATH ?= ./streams/streat.mp4
 
 #MODEL_PATH ?= $(MODELS_DIR)/$(PRECISION)/centernet.xml
-#INPUT_PATH ?= ./streams/tube.jpg
+INPUT_PATH ?= ./streams/tube.jpg
 # ----------------------------------
 # Docker Configuration
 # ----------------------------------
