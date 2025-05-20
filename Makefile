@@ -21,7 +21,7 @@ PRECISION   ?= FP32
 #INPUT_PATH ?= ./streams/streat.mp4
 
 MODEL_PATH ?= $(MODELS_DIR)/$(PRECISION)/centernet.xml
-INPUT_PATH ?= ./streams/tube_3.jpg
+INPUT_PATH ?= ./streams/tube_capped.jpg
 # ----------------------------------
 # Docker Configuration
 # ----------------------------------
