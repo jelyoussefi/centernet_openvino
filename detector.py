@@ -46,7 +46,7 @@ def is_image_file(file_path):
         return False
 
 
-def draw_detections(frame, detections, labels, fps=None):
+def draw_detections(frame, detections, labels, fps, device, precision):
     vis_frame = frame.copy()
     font = cv2.FONT_HERSHEY_SIMPLEX
     for detection in detections:
@@ -55,24 +55,25 @@ def draw_detections(frame, detections, labels, fps=None):
         x1, y1 = int(xmin), int(ymin)
         x2, y2 = int(xmax), int(ymax)
         cls_id = int(class_id)
+        det_label = labels[cls_id] if labels and len(labels) >= cls_id else '#{}'.format(cls_id)
         color = (255,0,0) #colors[cls_id % len(colors)]
         cv2.rectangle(vis_frame, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(vis_frame, '{} {:.1%}'.format(cls_id, score), (xmin, ymin - 7), font, 0.6, (0,0,255), 1)
+        cv2.putText(vis_frame, '{} {:.1%}'.format(det_label, score), (xmin, ymin - 7), font, 0.5, (0,255,0), 1)
 
-    if fps is not None:
-            font_scale = 0.6
-            font_thickness = 1
-            text_color = (0, 0, 255)  # Red in BGR
-            text_size, _ = cv2.getTextSize(fps, font, font_scale, font_thickness)
-            text_x = (vis_frame.shape[1] - text_size[0]) // 2  # Center horizontally
-            text_y = text_size[1] + 10  
-            bg_padding = 5
-            cv2.rectangle(vis_frame, (text_x - bg_padding, text_y - text_size[1] - bg_padding),
-                          (text_x + text_size[0] + bg_padding, text_y + bg_padding),
-                          (0, 0, 0), -1
-            )
-            # Draw FPS text
-            cv2.putText(vis_frame, fps_text, (text_x, text_y), font, font_scale, text_color, font_thickness, cv2.LINE_AA )
+    info =  f"FPS ({device}:{precision}): {fps:.1f}"
+    font_scale = 0.6
+    font_thickness = 1
+    text_color = (0, 0, 255)  # Red in BGR
+    text_size, _ = cv2.getTextSize(info, font, font_scale, font_thickness)
+    text_x = (vis_frame.shape[1] - text_size[0]) // 2  # Center horizontally
+    text_y = text_size[1] + 10  
+    bg_padding = 5
+    cv2.rectangle(vis_frame, (text_x - bg_padding, text_y - text_size[1] - bg_padding),
+                  (text_x + text_size[0] + bg_padding, text_y + bg_padding),
+                  (0, 0, 0), -1
+    )
+    # Draw FPS text
+    cv2.putText(vis_frame, info, (text_x, text_y), font, font_scale, text_color, font_thickness, cv2.LINE_AA )
 
     return vis_frame
 
@@ -92,7 +93,7 @@ if __name__ == '__main__':
     labels = ["Capped", "TTSC", "Uncapped", "Foil"]
     
     # Initialize the model
-    model = CenterNet(args.model, args.device, confidence_threshold=0.5)
+    model = CenterNet(args.model, args.device, confidence_threshold=0.7)
     
     # Check if input is an image file
     is_image = is_image_file(args.input)
@@ -126,10 +127,9 @@ if __name__ == '__main__':
         current_time = time.time()
         fps = 1.0 / (current_time - prev_time)
         fps_avg = alpha * fps + (1 - alpha) * fps_avg if frame_count > 1 else fps
-        fps_text = f"FPS: {fps_avg:.1f}"
         prev_time = current_time
 
-        display_frame = draw_detections(frame, detections, labels, fps_text)
+        display_frame = draw_detections(frame, detections, labels, fps_avg, args.device, args.precision)
         
         if gui_enabled:
             cv2.imshow('frame', display_frame)

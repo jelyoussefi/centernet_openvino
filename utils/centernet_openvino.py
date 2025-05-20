@@ -46,11 +46,11 @@ class CenterNet():
         return dets
 
     def preprocess(self, frame):
-        #input = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        input = cv2.resize(frame, (self.w, self.h), interpolation=cv2.INTER_LINEAR)
-        #mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)
-        #std = np.array([58.395, 57.12, 57.375], dtype=np.float32)
-        #input = (input - mean) / std  # Applied per channel
+        input = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        input = cv2.resize(input, (self.w, self.h), interpolation=cv2.INTER_LINEAR)
+        mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)
+        std = np.array([58.395, 57.12, 57.375], dtype=np.float32)
+        input = (input - mean) / std  # Applied per channel
         input = input[np.newaxis, ...]  # (1, H, W, C)
         input = input.transpose(0, 3, 1, 2)  # (1, C, H, W)
         return input

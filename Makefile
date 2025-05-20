@@ -15,11 +15,11 @@ CONFIG_PATH ?= ./model_centernet_r18_8xb16-crop512-140e_coco.py
 DEVICE      ?= GPU
 PRECISION   ?= FP32
 
-MODEL_PATH ?= $(MODELS_DIR)/$(PRECISION)/ctdet_coco_dlav0_512.xml
+#MODEL_PATH ?= $(MODELS_DIR)/$(PRECISION)/ctdet_coco_dlav0_512.xml
 #INPUT_PATH ?= ./streams/streat.mp4
 
-#MODEL_PATH ?= $(MODELS_DIR)/$(PRECISION)/centernet.xml
-INPUT_PATH ?= ./streams/tube.jpg
+MODEL_PATH ?= $(MODELS_DIR)/$(PRECISION)/centernet.xml
+INPUT_PATH ?= ./streams/tube_3.jpg
 # ----------------------------------
 # Docker Configuration
 # ----------------------------------
