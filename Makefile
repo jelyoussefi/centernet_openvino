@@ -13,7 +13,6 @@ CONFIG_PATH ?= ./model_centernet_r18_8xb16-crop512-140e_coco.py
 
 # Default Parameters
 DEVICE      ?= GPU
-INPUT_SIZE  ?= 512
 PRECISION   ?= FP32
 
 MODEL_PATH ?= $(MODELS_DIR)/$(PRECISION)/ctdet_coco_dlav0_512.xml
@@ -72,7 +71,6 @@ run: build
 			-m $(MODEL_PATH) \
 			-i $(INPUT_PATH) \
 			-d $(DEVICE) \
-			-r $(INPUT_SIZE) \
 			-p $(PRECISION)"
 
 

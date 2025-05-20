@@ -23,9 +23,8 @@ import openvino.properties.hint as hints
 
 
 class CenterNet():
-    def __init__(self, model_path, resolution=(640,640), device="CPU", confidence_threshold=0.5):
+    def __init__(self, model_path, device="CPU", confidence_threshold=0.5):
 
-        self.resolution = resolution
         self.device = device
         self.confidence_threshold = confidence_threshold
 
@@ -35,33 +34,33 @@ class CenterNet():
                   hints.num_requests: "4"}
 
         self.model = self.ov_core.compile_model(model_path, device, config)
-
+        _, _, self.h, self.w = self.model.inputs[0].shape
         self.input_names = [input.any_name for input in self.model.inputs]
         self.output_names = [output.any_name for output in self.model.outputs]
 
     def __call__(self, frame):
 
-        input_frame = self.preprocess(frame, self.resolution)
+        input_frame = self.preprocess(frame)
         outputs = self.model(input_frame)
         dets = self.postprocess(outputs, frame)
         return dets
 
-    def preprocess(self, frame, resize=(640, 640)):
-        input = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        input = cv2.resize(input, resize).astype(np.float32)
+    def preprocess(self, frame):
+        #input = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        input = cv2.resize(frame, (self.w, self.h), interpolation=cv2.INTER_LINEAR)
         #mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)
         #std = np.array([58.395, 57.12, 57.375], dtype=np.float32)
         #input = (input - mean) / std  # Applied per channel
         input = input[np.newaxis, ...]  # (1, H, W, C)
         input = input.transpose(0, 3, 1, 2)  # (1, C, H, W)
-
         return input
 
     def postprocess(self, outputs, original_frame):
 
         heat = outputs[self.output_names[0]][0]
-        reg = outputs[self.output_names[1]][0]
-        wh = outputs[self.output_names[2]][0]
+        reg = outputs[self.output_names[2]][0]
+        wh = outputs[self.output_names[1]][0]
+
         heat = np.exp(heat)/(1 + np.exp(heat))
         height, width = heat.shape[1:3]
         num_predictions = 100
@@ -86,10 +85,22 @@ class CenterNet():
         mask = detections[..., 4] >= self.confidence_threshold
         filtered_detections = detections[mask]
         original_shape = original_frame.shape
+
         scale = max(original_shape)
         center = np.array(original_shape[:2])/2.0
+
         dets = self.transform(filtered_detections, np.flip(center, 0), scale, height, width)
-        return dets 
+        detections = []
+        for det in dets:
+            xmin, ymin, xmax, ymax, score, class_id = det
+            xmin = max(int(xmin), 0)
+            ymin = max(int(ymin), 0)
+            xmax = min(int(xmax), original_shape[1])
+            ymax = min(int(ymax), original_shape[0])
+            class_id = int(class_id)
+            detections.append([xmin, ymin, xmax, ymax, score, class_id])
+
+        return detections 
 
     def get_affine_transform(self, center, scale, rot, output_size, inv=False):
 
