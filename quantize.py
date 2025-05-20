@@ -7,6 +7,7 @@ import argparse
 import numpy as np
 import cv2
 from tqdm import tqdm
+
 import openvino as ov
 import nncf
 from nncf.quantization import quantize

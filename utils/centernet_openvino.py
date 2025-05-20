@@ -15,9 +15,9 @@
 """
 
 import cv2
+import time
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
-
 import openvino as ov
 import openvino.properties.hint as hints
 
@@ -30,8 +30,7 @@ class CenterNet():
 
         self.ov_core = ov.Core()
         
-        config = {hints.performance_mode: hints.PerformanceMode.THROUGHPUT,
-                  hints.num_requests: "4"}
+        config = {hints.performance_mode: hints.PerformanceMode.THROUGHPUT}
 
         self.model = self.ov_core.compile_model(model_path, device, config)
         _, _, self.h, self.w = self.model.inputs[0].shape
@@ -41,9 +40,11 @@ class CenterNet():
     def __call__(self, frame):
 
         input_frame = self.preprocess(frame)
+        start_time = time.time()
         outputs = self.model(input_frame)
+        infer_time =  (time.time() - start_time)
         dets = self.postprocess(outputs, frame)
-        return dets
+        return (dets,infer_time)
 
     def preprocess(self, frame):
         input = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

@@ -7,6 +7,7 @@ USER root
 # Install system dependencies
 RUN apt update -y && apt install -y \
     build-essential \
+    software-properties-common \
     wget \
     gpg \
     python3-pip \
@@ -19,16 +20,10 @@ RUN apt update -y && apt install -y \
 # ----------------------------------
 # 1. Install Intel Graphic Drivers
 # ----------------------------------
-WORKDIR /tmp
-RUN wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.10.8/intel-igc-core-2_2.10.8+18926_amd64.deb  && \
-    wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.10.8/intel-igc-opencl-2_2.10.8+18926_amd64.deb && \
-    wget https://github.com/intel/compute-runtime/releases/download/25.13.33276.16/intel-level-zero-gpu-dbgsym_1.6.33276.16_amd64.ddeb && \
-    wget https://github.com/intel/compute-runtime/releases/download/25.13.33276.16/intel-level-zero-gpu_1.6.33276.16_amd64.deb && \
-    wget https://github.com/intel/compute-runtime/releases/download/25.13.33276.16/intel-opencl-icd-dbgsym_25.13.33276.16_amd64.ddeb && \
-    wget https://github.com/intel/compute-runtime/releases/download/25.13.33276.16/intel-opencl-icd_25.13.33276.16_amd64.deb && \
-    wget https://github.com/intel/compute-runtime/releases/download/25.13.33276.16/libigdgmm12_22.7.0_amd64.deb && \
-    dpkg -i *.deb && \
-    rm -f *.deb
+RUN add-apt-repository -y ppa:kobuk-team/intel-graphics
+RUN apt install -y libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc
+RUN apt install -y intel-media-va-driver-non-free libmfx-gen1 libvpl2 libvpl-tools libva-glx2 va-driver-all vainfo
+RUN apt install -y libze-dev intel-ocloc
 
 # ----------------------------------
 # 2. Install NPU Driver

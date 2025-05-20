@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import argparse
 import time
-import logging
+from collections import deque
 import imghdr  # Used to check if a file is an image
 
 from utils.centernet_openvino import CenterNet
@@ -100,11 +100,10 @@ if __name__ == '__main__':
     
     gui_enabled = bool(os.environ.get('DISPLAY'))
     
-    # FPS calculation variables
-    prev_time = time.time()
-    fps_avg = 0.0
-    alpha = 0.1  # Smoothing factor for moving average
+    fps_values = deque(maxlen=100)  # Store up to 100 FPS values
+
     frame_count = 0
+    prev_time = time.time()
 
     if not is_image:
         cap = cv2.VideoCapture(args.input)
@@ -122,14 +121,14 @@ if __name__ == '__main__':
         frame_count += 1
                 
         # Process the image with the model
-        detections = model(frame)
+        detections, infer_time = model(frame)
         
-        current_time = time.time()
-        fps = 1.0 / (current_time - prev_time)
-        fps_avg = alpha * fps + (1 - alpha) * fps_avg if frame_count > 1 else fps
-        prev_time = current_time
+        fps = 1.0 / (infer_time)
 
-        display_frame = draw_detections(frame, detections, labels, fps_avg, args.device, args.precision)
+        fps_values.append(fps)
+        avg_fps = sum(fps_values) / len(fps_values)
+
+        display_frame = draw_detections(frame, detections, labels, avg_fps, args.device, args.precision)
         
         if gui_enabled:
             cv2.imshow('frame', display_frame)
@@ -137,7 +136,7 @@ if __name__ == '__main__':
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
         else:
-            print(f"\t{fps_text}")        
+            print(f"\tFPS ({args.device}:{args.precision}) : {avg_fps}")        
 
     cap.release()
     
