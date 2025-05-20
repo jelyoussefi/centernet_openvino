@@ -55,15 +55,11 @@ def draw_detections(frame, detections, labels):
         x1, y1 = int(xmin), int(ymin)
         x2, y2 = int(xmax), int(ymax)
         cls_id = int(class_id)
-        color = (0,255,0) #colors[cls_id % len(colors)]
+        color = (255,0,0) #colors[cls_id % len(colors)]
         cv2.rectangle(vis_frame, (x1, y1), (x2, y2), color, 2)
-        class_name = str(cls_id) #labels[cls_id] if 0 <= cls_id < len(labels) else "Unknown"
-        label_text = f"{class_name}: {score:.2f}"
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        (text_width, text_height), baseline = cv2.getTextSize(label_text, font, 0.5, 1)
-        cv2.rectangle(vis_frame, (x1, y1-text_height-baseline-5), (x1+text_width, y1), color, -1)
-        cv2.putText(vis_frame, label_text, (x1, y1-5), font, 0.5, (255, 255, 255), 1)
-        
+        cv2.putText(vis_frame, '{} {:.1%}'.format(cls_id, score),
+                    (xmin, ymin - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, (0,0,255), 1)
+
     return vis_frame
 
 
@@ -82,21 +78,18 @@ if __name__ == '__main__':
     labels = ["Capped", "TTSC", "Uncapped", "Foil"]
     
     # Initialize the model
-    model = CenterNet(args.model, args.device, confidence_threshold=0.3)
+    model = CenterNet(args.model, args.device, confidence_threshold=0.5)
     
     # Check if input is an image file
     is_image = is_image_file(args.input)
     
     gui_enabled = bool(os.environ.get('DISPLAY'))
-    if gui_enabled:
-        cv2.namedWindow('frame', cv2.WINDOW_NORMAL)
     
     # FPS calculation variables
     prev_time = time.time()
     fps_avg = 0.0
     alpha = 0.1  # Smoothing factor for moving average
     frame_count = 0
-    np.set_printoptions(threshold=np.inf, linewidth=80, suppress=True, precision=2)
 
     if is_image:
         pass
@@ -109,7 +102,6 @@ if __name__ == '__main__':
             exit(1)
             
         start_time = 0  # skip first {start_time} seconds
-        cap.set(cv2.CAP_PROP_POS_FRAMES, start_time * cap.get(cv2.CAP_PROP_FPS))
 
         while cap.isOpened():
             ret, frame = cap.read()
