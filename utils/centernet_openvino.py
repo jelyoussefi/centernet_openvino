@@ -37,6 +37,8 @@ class CenterNet():
         self.input_names = [input.any_name for input in self.model.inputs]
         self.output_names = [output.any_name for output in self.model.outputs]
 
+        self.nb_outputs = len(self.output_names)
+
     def __call__(self, frame):
 
         input_frame = self.preprocess(frame)
@@ -52,55 +54,67 @@ class CenterNet():
         mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)
         std = np.array([58.395, 57.12, 57.375], dtype=np.float32)
         input = (input - mean) / std  # Applied per channel
+        #input = input.astype(np.float32) / 255.0 
         input = input[np.newaxis, ...]  # (1, H, W, C)
         input = input.transpose(0, 3, 1, 2)  # (1, C, H, W)
         return input
 
     def postprocess(self, outputs, original_frame):
 
-        heat = outputs[self.output_names[0]][0]
-        reg = outputs[self.output_names[2]][0]
-        wh = outputs[self.output_names[1]][0]
-
-        heat = np.exp(heat)/(1 + np.exp(heat))
-        height, width = heat.shape[1:3]
-        num_predictions = 100
-
-        heat = self.nms(heat)
-        scores, inds, clses, ys, xs = self.topk(heat, K=num_predictions)
-        reg = self.tranpose_and_gather_feat(reg, inds)
-
-        reg = reg.reshape((num_predictions, 2))
-        xs = xs.reshape((num_predictions, 1)) + reg[:, 0:1]
-        ys = ys.reshape((num_predictions, 1)) + reg[:, 1:2]
-
-        wh = self.tranpose_and_gather_feat(wh, inds)
-        wh = wh.reshape((num_predictions, 2))
-        clses = clses.reshape((num_predictions, 1))
-        scores = scores.reshape((num_predictions, 1))
-        bboxes = np.concatenate((xs - wh[..., 0:1] / 2,
-                                 ys - wh[..., 1:2] / 2,
-                                 xs + wh[..., 0:1] / 2,
-                                 ys + wh[..., 1:2] / 2), axis=1)
-        detections = np.concatenate((bboxes, scores, clses), axis=1)
-        mask = detections[..., 4] >= self.confidence_threshold
-        filtered_detections = detections[mask]
-        original_shape = original_frame.shape
-
-        scale = max(original_shape)
-        center = np.array(original_shape[:2])/2.0
-
-        dets = self.transform(filtered_detections, np.flip(center, 0), scale, height, width)
         detections = []
-        for det in dets:
-            xmin, ymin, xmax, ymax, score, class_id = det
-            xmin = max(int(xmin), 0)
-            ymin = max(int(ymin), 0)
-            xmax = min(int(xmax), original_shape[1])
-            ymax = min(int(ymax), original_shape[0])
-            class_id = int(class_id)
-            detections.append([xmin, ymin, xmax, ymax, score, class_id])
+        if self.nb_outputs == 3:
+            heat = outputs[self.output_names[0]][0]
+            reg = outputs[self.output_names[2]][0]
+            wh = outputs[self.output_names[1]][0]
 
+            heat = np.exp(heat)/(1 + np.exp(heat))
+            height, width = heat.shape[1:3]
+            num_predictions = 100
+
+            heat = self.nms(heat)
+            scores, inds, clses, ys, xs = self.topk(heat, K=num_predictions)
+            reg = self.tranpose_and_gather_feat(reg, inds)
+
+            reg = reg.reshape((num_predictions, 2))
+            xs = xs.reshape((num_predictions, 1)) + reg[:, 0:1]
+            ys = ys.reshape((num_predictions, 1)) + reg[:, 1:2]
+
+            wh = self.tranpose_and_gather_feat(wh, inds)
+            wh = wh.reshape((num_predictions, 2))
+            clses = clses.reshape((num_predictions, 1))
+            scores = scores.reshape((num_predictions, 1))
+            bboxes = np.concatenate((xs - wh[..., 0:1] / 2,
+                                     ys - wh[..., 1:2] / 2,
+                                     xs + wh[..., 0:1] / 2,
+                                     ys + wh[..., 1:2] / 2), axis=1)
+            dets = np.concatenate((bboxes, scores, clses), axis=1)
+            mask = dets[..., 4] >= self.confidence_threshold
+            filtered_detections = dets[mask]
+            original_shape = original_frame.shape
+
+            scale = max(original_shape)
+            center = np.array(original_shape[:2])/2.0
+
+            dets = self.transform(filtered_detections, np.flip(center, 0), scale, height, width)
+            for det in dets:
+                xmin, ymin, xmax, ymax, score, class_id = det
+                xmin = max(int(xmin), 0)
+                ymin = max(int(ymin), 0)
+                xmax = min(int(xmax), original_shape[1])
+                ymax = min(int(ymax), original_shape[0])
+                class_id = int(class_id)
+                detections.append([xmin, ymin, xmax, ymax, score, class_id])
+        else:
+            np.set_printoptions(threshold=np.inf, linewidth=80, suppress=True, precision=2)
+            dets = outputs[self.output_names[0]][0]
+            labels = outputs[self.output_names[1]][0]
+            print("------------------------------------ ", dets.shape[0])
+            for det in dets:
+                score = det[4]  # Score is the 5th element
+                if score < self.confidence_threshold:
+                    continue
+                print(det, lables[i])
+            
         return detections 
 
     def get_affine_transform(self, center, scale, rot, output_size, inv=False):

@@ -6,6 +6,12 @@
 # ----------------------------------
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+# Virtual Environment Settings
+$VENV_NAME = "centernet_venv"
+$VENV_DIR = Join-Path $SCRIPT_DIR $VENV_NAME
+$PYTHON_VERSION = "3.11"  # Python 11 (3.11)
+$REQUIREMENTS_FILE = Join-Path $SCRIPT_DIR "requirements.txt"
+
 # Directories
 $DATASET_DIR = Join-Path $SCRIPT_DIR "dataset"
 $MODELS_DIR = Join-Path $SCRIPT_DIR "models"
@@ -22,26 +28,98 @@ $CONFIG_PATH = if ($env:CONFIG_PATH) { $env:CONFIG_PATH } else { Join-Path $SCRI
 $MODEL_PATH = Join-Path $MODELS_DIR "$PRECISION\centernet.xml"
 $INPUT_PATH = Join-Path $SCRIPT_DIR "streams\tube_capped.jpg"
 
-# ----------------------------------
-# Helper Functions
-# ----------------------------------
+function Setup-VirtualEnvironment {
+    Write-Host "🔧 Setting up Python $PYTHON_VERSION virtual environment..."
+    
+    # Check if Python is installed
+    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $pythonCmd) {
+        Write-Host "Error: Python is not installed or not in the PATH" -ForegroundColor Red
+        Write-Host "Please install Python $PYTHON_VERSION from https://www.python.org/downloads/" -ForegroundColor Yellow
+        return $false
+    }
+    
+    # Check Python version
+    $pythonVersion = python --version 2>&1
+    if (-not $pythonVersion.ToString().Contains("Python 3")) {
+        Write-Host "Error: Python 3 is required" -ForegroundColor Red
+        return $false
+    }
+    
+    # Check if virtual environment exists
+    if (Test-Path $VENV_DIR) {
+        Write-Host "Virtual environment already exists at $VENV_DIR" -ForegroundColor Yellow
+        $recreate = Read-Host "Do you want to recreate it? (y/n)"
+        if ($recreate -eq "y") {
+            Remove-Item -Path $VENV_DIR -Recurse -Force
+        } else {
+            Write-Host "Using existing virtual environment" -ForegroundColor Green
+            return $true
+        }
+    }
+    
+    # Install virtualenv if needed
+    Write-Host "Installing/Upgrading virtualenv..."
+    python -m pip install --upgrade virtualenv
+    
+    # Create virtual environment
+    Write-Host "Creating virtual environment at $VENV_DIR..."
+    python -m virtualenv $VENV_DIR --python=$PYTHON_VERSION
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Virtual environment created successfully" -ForegroundColor Green
+        return $true
+    } else {
+        Write-Host "Failed to create virtual environment" -ForegroundColor Red
+        Write-Host "You might need to install Python $PYTHON_VERSION first" -ForegroundColor Yellow
+        return $false
+    }
+}
+
+function Enter-VirtualEnvironment {
+    # Check if virtual environment exists
+    if (-not (Test-Path $VENV_DIR)) {
+        Write-Host "Virtual environment not found at $VENV_DIR" -ForegroundColor Red
+        $create = Read-Host "Do you want to create it now? (y/n)"
+        if ($create -eq "y") {
+            if (-not (Setup-VirtualEnvironment)) {
+                return $false
+            }
+        } else {
+            return $false
+        }
+    }
+    
+    # Activate virtual environment
+    $activateScript = Join-Path $VENV_DIR "Scripts\Activate.ps1"
+    if (Test-Path $activateScript) {
+        & $activateScript
+        Write-Host "Virtual environment activated" -ForegroundColor Green
+        return $true
+    } else {
+        Write-Host "Activation script not found at $activateScript" -ForegroundColor Red
+        return $false
+    }
+}
 function Show-Menu {
     Clear-Host
     Write-Host "================ CenterNet OpenVINO on Windows 11 ================"
-    Write-Host "1: Run Inference"
-    Write-Host "2: Prepare COCO Dataset"
-    Write-Host "3: Export PyTorch Model to OpenVINO"
-    Write-Host "4: Quantize Model to INT8"
+    Write-Host "1: Setup Python 3.11 Virtual Environment"
+    Write-Host "2: Install Dependencies (pip install -r requirements.txt)"
+    Write-Host "3: Run Inference"
+    Write-Host "4: Prepare COCO Dataset"
+    Write-Host "5: Export PyTorch Model to OpenVINO"
+    Write-Host "6: Quantize Model to INT8"
     Write-Host "Q: Quit"
     Write-Host "=============================================================="
 }
 
 function Run-Inference {
-    Write-Host "🚀 Running CenterNet Inference demo in $PRECISION ..."
+    Write-Host "Running CenterNet Inference demo in $PRECISION ..."
     
-    # Make sure python is available
-    if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-        Write-Host "❌ Error: Python is not installed or not in the PATH" -ForegroundColor Red
+    # Make sure we're in the virtual environment
+    if (-not (Enter-VirtualEnvironment)) {
+        Write-Host "Cannot run inference without virtual environment" -ForegroundColor Yellow
         return
     }
     
@@ -56,18 +134,29 @@ function Run-Inference {
 function Prepare-Dataset {
     Write-Host "🚀 Preparing the COCO dataset ..."
     
+    # Make sure we're in the virtual environment
+    if (-not (Enter-VirtualEnvironment)) {
+        Write-Host "Cannot prepare dataset without virtual environment" -ForegroundColor Yellow
+        return
+    }
+    
     # Create directory if it doesn't exist
     if (-not (Test-Path $COCO_DATASET_DIR)) {
         New-Item -ItemType Directory -Path $COCO_DATASET_DIR -Force | Out-Null
     }
     
     # Run the dataset preparation script
-    # Convert bash script logic to PowerShell
     python "$SCRIPT_DIR\prepare_coco_dataset.py"
 }
 
 function Export-ToOpenVINO {
-    Write-Host "🚀 Exporting PyTorch model to OpenVINO ..."
+    Write-Host "Exporting PyTorch model to OpenVINO ..."
+    
+    # Make sure we're in the virtual environment
+    if (-not (Enter-VirtualEnvironment)) {
+        Write-Host "Cannot export model without virtual environment" -ForegroundColor Yellow
+        return
+    }
     
     # Create output directory if it doesn't exist
     $outputDir = Join-Path $MODELS_DIR "FP32"
@@ -85,6 +174,12 @@ function Export-ToOpenVINO {
 
 function Quantize-Model {
     Write-Host "⚙️ Quantizing model to INT8 ..."
+    
+    # Make sure we're in the virtual environment
+    if (-not (Enter-VirtualEnvironment)) {
+        Write-Host "Cannot quantize model without virtual environment" -ForegroundColor Yellow
+        return
+    }
     
     # Make sure the dataset is prepared
     if (-not (Test-Path $COCO_DATASET_DIR)) {
@@ -113,13 +208,15 @@ function Quantize-Model {
 # Check for command line arguments
 if ($args.Count -gt 0) {
     switch ($args[0].ToLower()) {
+        "setup" { Setup-VirtualEnvironment; exit }
+        "install" { Install-Dependencies; exit }
         "run" { Run-Inference; exit }
         "dataset" { Prepare-Dataset; exit }
         "export" { Export-ToOpenVINO; exit }
         "quantize" { Quantize-Model; exit }
         default { 
             Write-Host "Unknown command: $($args[0])"
-            Write-Host "Available commands: run, dataset, export, quantize"
+            Write-Host "Available commands: setup, install, run, dataset, export, quantize"
             exit 1
         }
     }
@@ -131,10 +228,12 @@ do {
     $selection = Read-Host "Please make a selection"
     
     switch ($selection) {
-        '1' { Run-Inference; pause }
-        '2' { Prepare-Dataset; pause }
-        '3' { Export-ToOpenVINO; pause }
-        '4' { Quantize-Model; pause }
+        '1' { Setup-VirtualEnvironment; pause }
+        '2' { Install-Dependencies; pause }
+        '3' { Run-Inference; pause }
+        '4' { Prepare-Dataset; pause }
+        '5' { Export-ToOpenVINO; pause }
+        '6' { Quantize-Model; pause }
         'q' { return }
     }
 } until ($selection -eq 'q')

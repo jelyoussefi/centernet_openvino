@@ -1,0 +1,31 @@
+# OpenVINO and related dependencies
+openvino
+nncf
+
+# PyTorch and vision libraries (CPU version for Windows)
+torch==2.2.0
+torchvision
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# OpenMMLab libraries
+mmcv==2.1.*
+mmdet
+
+# Core libraries
+numpy
+opencv-python
+
+# Visualization and utilities
+matplotlib<3.6.0
+networkx>=2.8
+
+# Other utilities that might be needed
+tqdm
+Pillow
+pyyaml
+requests
+
+# Optional: Add these if needed for your specific implementation
+# scikit-learn
+# scipy
+# pandas
