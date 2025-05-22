@@ -1,4 +1,5 @@
 import os
+import sys
 import cv2
 import torch
 import numpy as np
@@ -82,7 +83,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Video tracking with TAPIR model')
     parser.add_argument('-m', '--model', type=str, required=True, help='Path to the model ')
     parser.add_argument('-i', '--input', type=str, required=True, help='Path to input video file or image file')
-    parser.add_argument('-d', '--device', type=str, default='GPU', choices=['CPU', 'GPU', 'NPU'], help='Device to run the model on: CPU or GPU')
+    parser.add_argument('-d', '--device', type=str, default='GPU', choices=['CPU', 'GPU', 'NPU', 'AUTO'], help='Device to run the model on: CPU or GPU')
     parser.add_argument('-p', '--precision', type=str, default='FP32', choices=['FP32', 'INT8'], help='Model precision: FP32 or INT8')
     args = parser.parse_args()
 
@@ -92,18 +93,28 @@ if __name__ == '__main__':
     
     labels = ["Capped", "TTSC", "Uncapped", "Foil"]
     
+    gui_enabled = bool(os.environ.get('DISPLAY'))
+    
+
+    def callback(detections, frame, fps, latency):
+        display_frame = draw_detections(frame, detections, labels, 1000/latency, args.device, args.precision)
+        
+        if gui_enabled:
+            cv2.imshow('frame', display_frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                return False
+        
+
+        else:
+            print(f"\tFPS ({args.device}:{args.precision}) : {fps}")     
+
+        return True
+
     # Initialize the model
-    model = CenterNet(args.model, args.device, confidence_threshold=0.7)
+    model = CenterNet(args.model, args.device, callback, confidence_threshold=0.7)
     
     # Check if input is an image file
     is_image = is_image_file(args.input)
-    
-    gui_enabled = bool(os.environ.get('DISPLAY'))
-    
-    fps_values = deque(maxlen=100)  # Store up to 100 FPS values
-
-    frame_count = 0
-    prev_time = time.time()
 
     if not is_image:
         cap = cv2.VideoCapture(args.input)
@@ -114,31 +125,13 @@ if __name__ == '__main__':
         else:
             ret , frame = cap.read()
 
-
         if not ret:
             break
-                    
-        frame_count += 1
-                
-        # Process the image with the model
-        detections, infer_time = model(frame)
-        
-        fps = 1.0 / (infer_time)
 
-        fps_values.append(fps)
-        avg_fps = sum(fps_values) / len(fps_values)
+        ret =  model.infer(frame)
+        if not ret:
+            break       
 
-        display_frame = draw_detections(frame, detections, labels, avg_fps, args.device, args.precision)
-        
-        if gui_enabled:
-            cv2.imshow('frame', display_frame)
-
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-        else:
-            print(f"\tFPS ({args.device}:{args.precision}) : {avg_fps}")        
-
-    cap.release()
     
     # Clean up resources
     cv2.destroyAllWindows()

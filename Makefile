@@ -24,6 +24,7 @@ MODEL_PATH ?= $(MODELS_DIR)/$(PRECISION)/centernet.xml
 #MODEL_PATH ?= $(MODELS_DIR)/$(PRECISION)/end2end.xml
 INPUT_PATH ?= ./streams/tube_capped.jpg
 #INPUT_PATH = ./streams/streat.mp4
+#INPUT_PATH ?= ./streams/dog.jpg
 # ----------------------------------
 # Docker Configuration
 # ----------------------------------

@@ -16,16 +16,22 @@
 
 import cv2
 import time
+import threading
+import queue
+from collections import deque
+from time import perf_counter
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import openvino as ov
+import openvino.properties as props
 import openvino.properties.hint as hints
 
 
 class CenterNet():
-    def __init__(self, model_path, device="CPU", confidence_threshold=0.5):
+    def __init__(self, model_path, device, callback, confidence_threshold=0.5):
 
         self.device = device
+        self.callback = callback
         self.confidence_threshold = confidence_threshold
 
         self.ov_core = ov.Core()
@@ -34,38 +40,106 @@ class CenterNet():
 
         self.model = self.ov_core.compile_model(model_path, device, config)
         _, _, self.h, self.w = self.model.inputs[0].shape
-        self.input_names = [input.any_name for input in self.model.inputs]
+        self.input_name = self.model.inputs[0]
         self.output_names = [output.any_name for output in self.model.outputs]
-
         self.nb_outputs = len(self.output_names)
 
-    def __call__(self, frame):
+        self.latencies = deque(maxlen=100)
+        self.ireqs = ov.AsyncInferQueue(self.model)
+        self.ireqs.set_callback(self.ov_callback)
+        
+        self.frames_number = 0
+        self.start_time = perf_counter()
+        
+        # Queue for postprocessing results
+        self.postprocess_queue = queue.Queue()
+        
+        # Flag to control the postprocessing thread
+        self.running = True
+        
+        # Start the postprocessing thread
+        self.postprocess_thread = threading.Thread(target=self.postprocess_worker, daemon=True)
+        self.postprocess_thread.start()
 
-        input_frame = self.preprocess(frame)
-        start_time = time.time()
-        outputs = self.model(input_frame)
-        infer_time =  (time.time() - start_time)
-        dets = self.postprocess(outputs, frame)
-        return (dets,infer_time)
+    def infer(self, frame):
 
+        if  self.frames_number == 0:
+            self.start_time = perf_counter()
+
+        self.frames_number += 1
+
+        while not self.ireqs.is_ready() and self.running :
+            time.sleep(0.001)
+
+        if self.running:
+            input_frame = self.preprocess(frame)
+
+            self.ireqs.start_async(inputs={self.input_name: input_frame}, userdata=frame)
+
+        return self.running
+
+    def ov_callback(self, infer_request, userdata):
+        """OpenVINO callback that puts results in queue for postprocessing"""
+        original_frame = userdata  
+        self.latencies.append(infer_request.latency)
+        
+        # Put inference results in queue for postprocessing thread
+        self.postprocess_queue.put((infer_request.results, original_frame))
+           
+    def postprocess_worker(self):
+        """Worker thread for postprocessing and callback execution"""
+        while self.running:
+            try:
+                # Get results from queue with timeout
+                results, original_frame = self.postprocess_queue.get(timeout=0.1)
+                
+                # Perform postprocessing
+                dets = self.postprocess(results, original_frame.shape)
+                
+                # Call the callback with results
+                self.running = self.callback(dets, original_frame, self.fps(), self.latency())
+
+                # Mark task as done
+                self.postprocess_queue.task_done()
+                
+            except queue.Empty:
+                # Continue if queue is empty
+                continue
+            except Exception as e:
+                print(f"Error in postprocessing thread: {e}")
+                # Mark task as done even if there was an error
+                try:
+                    self.postprocess_queue.task_done()
+                except:
+                    pass
+
+    def stop(self):
+        """Stop the postprocessing thread"""
+        self.running = False
+        if self.postprocess_thread.is_alive():
+            self.postprocess_thread.join(timeout=1.0)
+
+    def __del__(self):
+        """Cleanup when object is destroyed"""
+        self.stop()
+         
     def preprocess(self, frame):
         input = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         input = cv2.resize(input, (self.w, self.h), interpolation=cv2.INTER_LINEAR)
         mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)
         std = np.array([58.395, 57.12, 57.375], dtype=np.float32)
         input = (input - mean) / std  # Applied per channel
-        #input = input.astype(np.float32) / 255.0 
         input = input[np.newaxis, ...]  # (1, H, W, C)
         input = input.transpose(0, 3, 1, 2)  # (1, C, H, W)
         return input
 
-    def postprocess(self, outputs, original_frame):
+    def postprocess(self, outputs, original_shape):
 
         detections = []
         if self.nb_outputs == 3:
-            heat = outputs[self.output_names[0]][0]
-            reg = outputs[self.output_names[2]][0]
-            wh = outputs[self.output_names[1]][0]
+            heat = outputs[next(k for k in outputs if k.get_any_name() == self.output_names[0])][0]
+            wh = outputs[next(k for k in outputs if k.get_any_name() == self.output_names[1])][0]
+            reg = outputs[next(k for k in outputs if k.get_any_name() == self.output_names[2])][0]
 
             heat = np.exp(heat)/(1 + np.exp(heat))
             height, width = heat.shape[1:3]
@@ -90,7 +164,6 @@ class CenterNet():
             dets = np.concatenate((bboxes, scores, clses), axis=1)
             mask = dets[..., 4] >= self.confidence_threshold
             filtered_detections = dets[mask]
-            original_shape = original_frame.shape
 
             scale = max(original_shape)
             center = np.array(original_shape[:2])/2.0
@@ -108,12 +181,11 @@ class CenterNet():
             np.set_printoptions(threshold=np.inf, linewidth=80, suppress=True, precision=2)
             dets = outputs[self.output_names[0]][0]
             labels = outputs[self.output_names[1]][0]
-            print("------------------------------------ ", dets.shape[0])
-            for det in dets:
+            for i, det in enumerate(dets):
                 score = det[4]  # Score is the 5th element
                 if score < self.confidence_threshold:
                     continue
-                print(det, lables[i])
+                print(det, labels[i])  # Fixed typo: lables -> labels
             
         return detections 
 
@@ -228,3 +300,12 @@ class CenterNet():
             dets[:, 2:4], center, scale, (width, height))
         return dets
 
+
+    def fps(self):
+        return self.frames_number/(perf_counter() - self.start_time)
+
+    def latency(self):
+        if len(self.latencies) > 0:
+            return np.mean(self.latencies)
+        else:
+            return 0
